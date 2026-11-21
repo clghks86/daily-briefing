@@ -886,10 +886,16 @@
     var parts = md.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
     return parts.map(function (p, i) {
       if (i % 2 === 1) return p; // 코드 블록/인라인 코드는 그대로
-      return p.replace(/\*\*([^*\n]+?)\*\*/g, function (m, inner) {
+      var out = p.replace(/\*\*([^*\n]+?)\*\*/g, function (m, inner) {
         var safe = inner.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
         return "<strong>" + safe + "</strong>";
       });
+      // `3.75~4.00%`, `12/8~9` 처럼 홑 물결표가 두 개 나타나면 marked가 취소선으로 오인한다.
+      // 홑 ~ 는 엔티티로 바꾸고, 짝 ~~ (취소선 의도)는 남긴다.
+      out = out.split("~~").map(function (seg) {
+        return seg.replace(/~/g, "&#126;");
+      }).join("~~");
+      return out;
     }).join("");
   }
 
