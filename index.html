@@ -540,7 +540,11 @@
 
   function renderSummary(row, d) {
     var html = "";
-    if (row.title) html += '<p class="headline">' + esc(String(row.title).replace(/^\[|\]$/g, "")) + "</p>";
+    if (row.title) {
+      // 상단 브랜드와 겹치는 "[데일리 브리핑]" 꼬리표만 제거
+      var title = String(row.title).replace(/^\s*\[?\s*데일리\s*브리핑\s*\]?\s*/, "").trim() || String(row.title);
+      html += '<p class="headline">' + esc(title) + "</p>";
+    }
     if (row.summary) html += '<p class="summary-text">' + esc(row.summary) + "</p>";
 
     var chips = [];
@@ -876,6 +880,19 @@
   }
 
   // ── 브리핑 전문 (markdown) ───────────────────────────────
+  // 원문의 `**-5.28%...**로` 처럼 닫는 ** 뒤에 한글이 붙으면 CommonMark 규칙상
+  // 굵게로 인식되지 않아 **가 그대로 보인다. 코드 구간은 건드리지 않고 미리 굵게로 바꿔 준다.
+  function preprocessMarkdown(md) {
+    var parts = md.split(/(```[\s\S]*?```|`[^`\n]*`)/g);
+    return parts.map(function (p, i) {
+      if (i % 2 === 1) return p; // 코드 블록/인라인 코드는 그대로
+      return p.replace(/\*\*([^*\n]+?)\*\*/g, function (m, inner) {
+        var safe = inner.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        return "<strong>" + safe + "</strong>";
+      });
+    }).join("");
+  }
+
   function renderReader(row) {
     var md = row.raw_markdown || "";
     if (!md.trim()) {
@@ -884,6 +901,7 @@
     }
     // 첫 H1은 화면 상단 제목과 겹치므로 제거
     md = md.replace(/^\s*#\s+.*(\r?\n)+/, "");
+    md = preprocessMarkdown(md);
 
     var html;
     if (window.marked && window.DOMPurify) {
