@@ -15,11 +15,11 @@
 |---|---|---|---|
 | `icon-512x512.png` | 앱 아이콘 | 512×512, 32-bit PNG, 1MB 이하 | 512×512, RGB(투명도 없음), 229KB |
 | `feature-graphic-1024x500.png` | 피처 그래픽 | 1024×500, PNG/JPG | 1024×500, RGB, 458KB |
-| `screenshot-01.png` | 휴대전화 스크린샷 1 | 1080×1920 (9:16) | 1080×1920, PNG |
-| `screenshot-02.png` | 휴대전화 스크린샷 2 | 1080×1920 | 1080×1920, PNG |
-| `screenshot-03.png` | 휴대전화 스크린샷 3 | 1080×1920 | 1080×1920, PNG |
-| `screenshot-04.png` | 휴대전화 스크린샷 4 | 1080×1920 | 1080×1920, PNG |
-| `screenshot-05.png` | 휴대전화 스크린샷 5 | 1080×1920 | 1080×1920, PNG |
+| `screenshot-01-home.png` | 휴대전화 스크린샷 1 | 1080×1920 (9:16) | 1080×1920, PNG |
+| `screenshot-02-indicators.png` | 휴대전화 스크린샷 2 | 1080×1920 | 1080×1920, PNG |
+| `screenshot-03-trend.png` | 휴대전화 스크린샷 3 | 1080×1920 | 1080×1920, PNG |
+| `screenshot-04-news.png` | 휴대전화 스크린샷 4 | 1080×1920 | 1080×1920, PNG |
+| `screenshot-05-alerts-widget.png` | 휴대전화 스크린샷 5 | 1080×1920 | 1080×1920, PNG |
 
 스크린샷 순서(Play Console 업로드 순서와 같게):
 
@@ -214,7 +214,7 @@ bundletool build-apks --bundle=app/build/outputs/bundle/release/app-release.aab 
 
 1. 기기에서 앱 실행 → 각 화면(홈 / 핵심 지표 / 추이 / 주요 뉴스 / 설정·알림)에서 전원+볼륨다운으로 캡처
 2. 1080×1920(9:16)로 자르고, 상단에 홍보 문구를 넣고 싶으면 기존 이미지의 문구 영역만 참고해 같은 배치로 합성
-3. 파일명을 `screenshot-01.png` ~ `screenshot-05.png` 로 바꿔 Play Console에서 교체 업로드
+3. 파일명을 `screenshot-01-home.png` ~ `screenshot-05-alerts-widget.png` 로 바꿔 Play Console에서 교체 업로드
    (이 폴더의 파일을 덮어쓰고 `git commit` 해 두면 나중에 비교하기 쉽습니다)
 
 ---
