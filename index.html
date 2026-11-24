@@ -243,6 +243,27 @@
   .img-card img{display:block;width:100%;height:auto;cursor:zoom-in}
   .img-card figcaption{font-size:12.5px;color:var(--muted);padding:9px 12px}
 
+  /* ---------- 섹션 인라인 배너 (briefing_images sort_order 1~3) ---------- */
+  .inline-banner{
+    margin:0;background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);
+  }
+  .inline-banner.cover{margin:0 0 16px}
+  .inline-banner.in-news{margin:0 0 14px}
+  .inline-banner.in-reader{margin:12px 0 4px}
+  .inline-banner.in-block{margin:26px 0 0}
+  .inline-banner .banner-shot{
+    display:block;width:100%;height:300px;margin:0;border-radius:0;
+    object-fit:cover;object-position:center;cursor:zoom-in;background:#0d131d;
+  }
+  .inline-banner .banner-cap{
+    display:block;margin:0;padding:9px 14px;font-size:12.5px;line-height:1.5;
+    color:var(--muted);border-top:1px solid var(--line-soft);background:rgba(255,255,255,.015);
+  }
+  @media (max-width:900px){
+    .inline-banner .banner-shot{height:240px}
+  }
+
   /* ---------- states ---------- */
   .skeleton{background:linear-gradient(90deg,var(--card) 25%,#18202e 37%,var(--card) 63%);background-size:400% 100%;animation:sk 1.4s ease infinite;border-radius:var(--radius-sm)}
   @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
@@ -282,6 +303,8 @@
     .panel{padding:13px}
     .news-grid{grid-template-columns:1fr}
     .img-card img{max-height:420px;object-fit:contain;background:#0d131d}
+    .inline-banner .banner-shot{height:auto;aspect-ratio:16/9;max-height:230px}
+    .inline-banner .banner-cap{font-size:12px;padding:8px 12px}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
@@ -531,7 +554,8 @@
     renderChart();
     renderNews(row, d);
     renderReader(row, d);
-    renderImages(row);
+    state.imgToken = (state.imgToken || 0) + 1;
+    renderImages(row, state.imgToken);
     var cnt = state.rows.length;
     var sub = document.getElementById("trendSub");
     if (sub) sub.textContent = cnt + "일치 누적 · 날짜가 쌓일수록 길어집니다";
@@ -942,35 +966,123 @@
   }
 
   // ── 첨부 이미지 (briefing_images) ────────────────────────
-  function renderImages(row) {
+  // sort_order 규칙으로 섹션마다 인라인 배치한다.
+  //   1 = 시장 요약 대표 커버(#summaryCard 안) · 2 = 암호화폐 & 금(전문의 코인/금 헤딩 뒤, 없으면 추이 아래)
+  //   3 = 주요 IT·글로벌 뉴스(#sec-news 안 카드 위) · 4 이상/못 붙인 이미지 = 하단 '첨부 이미지' 갤러리
+  function clearImageSlots() {
+    $$(".inline-banner").forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
     var old = document.getElementById("sec-images");
     if (old) old.remove();
+  }
+
+  function bindZoom(root) {
+    $$(".zoomable", root).forEach(function (im) {
+      if (im.dataset.zoomBound) return;
+      im.dataset.zoomBound = "1";
+      im.addEventListener("click", function () {
+        $("#lightboxImg").src = im.src;
+        $("#lightbox").classList.add("on");
+      });
+    });
+  }
+
+  // 헤딩 글자로 섹션 앵커를 찾는다. '금리'·'환율' 같은 오탐을 피해 패턴을 좁게 둔다.
+  var CRYPTO_HEAD = /암호화폐|가상자산|코인|비트코인/i;
+  var GOLD_HEAD = /국제\s*금|금\s*\(|금값|금\s*시세|골드|gold/i;
+
+  function findSectionHeading(box) {
+    if (!box) return null;
+    var hs = $$("h2, h3", box);
+    for (var i = 0; i < hs.length; i++) {
+      var t = (hs[i].textContent || "").replace(/\s+/g, " ").trim();
+      if (CRYPTO_HEAD.test(t) || GOLD_HEAD.test(t)) return hs[i];
+    }
+    return null;
+  }
+
+  function makeBanner(im, variant) {
+    var src = safeUrl(im.image_url);
+    if (!src) return null;
+    var cap = im.caption || "브리핑 첨부 이미지";
+    var fig = document.createElement("figure");
+    fig.className = "inline-banner " + variant;
+    fig.innerHTML =
+      '<img class="banner-shot zoomable" src="' + esc(src) + '" alt="' + esc(cap) +
+      '" loading="lazy" decoding="async">' +
+      '<figcaption class="banner-cap">' + esc(cap) + "</figcaption>";
+    return fig;
+  }
+
+  function renderImages(row, token) {
+    clearImageSlots();
+
     var url = SUPABASE_URL + "/rest/v1/briefing_images?briefing_date=eq." +
       encodeURIComponent(row.briefing_date) + "&order=sort_order.asc";
     fetch(url, { headers: HEADERS, cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (imgs) {
+        // 날짜를 빨리 바꿨을 때 이전 날짜의 응답이 끼어들지 않게 한다
+        if (token !== state.imgToken) return;
         if (!Array.isArray(imgs) || !imgs.length) return;
-        var sec = document.createElement("section");
-        sec.className = "block";
-        sec.id = "sec-images";
-        var cards = "";
+
+        var placed = {}, extras = [];
         imgs.forEach(function (im) {
+          var o = num(im.sort_order);
+          if ((o === 1 || o === 2 || o === 3) && !placed[o]) placed[o] = im;
+          else extras.push(im);
+        });
+
+        // 1) 시장 요약 대표 커버 — 요약 카드 맨 위
+        if (placed[1]) {
+          var cov = makeBanner(placed[1], "cover");
+          var card = $("#summaryCard");
+          if (cov && card) card.insertBefore(cov, card.firstChild);
+          else extras.unshift(placed[1]);
+        }
+
+        // 2) 암호화폐 & 금 — 전문의 코인/금 헤딩 바로 뒤, 헤딩이 없으면 추이 아래
+        if (placed[2]) {
+          var cband = makeBanner(placed[2], "in-reader");
+          var head = cband ? findSectionHeading($("#readerBody")) : null;
+          if (cband && head) {
+            head.parentNode.insertBefore(cband, head.nextSibling);
+          } else if (cband) {
+            cband.className = "inline-banner in-block";
+            var trend = $("#sec-trend");
+            if (trend) trend.parentNode.insertBefore(cband, trend.nextSibling);
+            else extras.unshift(placed[2]);
+          }
+        }
+
+        // 3) 주요 IT·글로벌 뉴스 — 뉴스 섹션 헤드 아래, 카드 목록 위
+        if (placed[3]) {
+          var nband = makeBanner(placed[3], "in-news");
+          var newsBody = $("#newsBody");
+          var secNews = $("#sec-news");
+          if (nband && newsBody && secNews) secNews.insertBefore(nband, newsBody);
+          else extras.unshift(placed[3]);
+        }
+
+        // 4) 남는 이미지는 기존처럼 하단 갤러리
+        var cards = "", n = 0;
+        extras.forEach(function (im) {
           var src = safeUrl(im.image_url);
           if (!src) return;
+          n++;
           cards += '<figure class="img-card"><img src="' + esc(src) + '" alt="' + esc(im.caption || "브리핑 첨부 이미지") +
             '" loading="lazy" class="zoomable">' + (im.caption ? "<figcaption>" + esc(im.caption) + "</figcaption>" : "") + "</figure>";
         });
-        if (!cards) return;
-        sec.innerHTML = '<div class="sec-head"><h2>첨부 이미지</h2><span class="sub">' + imgs.length + "장</span></div>" +
-          '<div class="imgs">' + cards + "</div>";
-        $("#sec-reader").after(sec);
-        $$(".zoomable", sec).forEach(function (im) {
-          im.addEventListener("click", function () {
-            $("#lightboxImg").src = im.src;
-            $("#lightbox").classList.add("on");
-          });
-        });
+        if (cards && token === state.imgToken) {
+          var sec = document.createElement("section");
+          sec.className = "block";
+          sec.id = "sec-images";
+          sec.innerHTML = '<div class="sec-head"><h2>첨부 이미지</h2><span class="sub">' + n + "장</span></div>" +
+            '<div class="imgs">' + cards + "</div>";
+          $("#sec-reader").after(sec);
+        }
+        bindZoom(document);
       })
       .catch(function () { /* 이미지 없음/오류는 무시 */ });
   }
